@@ -53,7 +53,7 @@ def main(videoStream,vidType, pixThreshold):
 		displayDiffs = 1
 	else:
 		displayDiffs = 0
-	#displayDiffs = 1 # override
+	displayDiffs = 1 # override
 
 	# Set Pixel Threshold
 	ret,frame = cap.read()

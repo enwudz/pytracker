@@ -1,6 +1,12 @@
-## This is the NEWEST version (Aug 24,2020). It accommodates time "gaps" among the npy files that result from stopping and starting data collection.
+## Updated 11 Jan 2021
+# usage:
+# To get ALL .npy files in the current directory:
+# python npy2csv.py
+#
+# To get .npy AFTER a particular time
+# python npy2csv.py 201231-083544
+#     you can grab the '201231-083544' from the most recent 'distances' file
 
-# Until Dec26,2020, its filename was "testing.py"
 
 import numpy as np
 import sys
@@ -10,19 +16,18 @@ from matplotlib import dates
 binSize = 1
 
 # choose whether to get all of the data, or just those after a certain time
-if len(sys.argv) > 1:
-    startData = sys.argv[1]
-    csvFile = 'distances_' + str(binSize) + '_' + startData + '.csv'
-    timeStampFile = 'distances_' + str(binSize) + '_' + startData + '.csv'
-
-    data = analysisTools.loadDataFromStartTime(startData,'xy')
-
-else:
-    csvFile = 'distances_' + str(binSize) + '.csv'
-    timeStampFile = 'timeStamps_' + str(binSize) + '.csv'
+if len(sys.argv) > 1: # if an start time specified, gather data AFTER that time
+        startData = sys.argv[1]
+        data = analysisTools.loadDataFromStartTime(startData,'xy')
+else: # if not options given, just get all of the .npy files
     # load all xy data
     data = analysisTools.loadData('xy')
 
+# get time stamp data of last .npy file, and add these to the names of the saved files
+lastTime = analysisTools.lastTimeStamp('xy')
+fileExt = str(lastTime) + '_' + str(binSize) + '.csv'
+csvFile = 'distances_' + fileExt
+timeStampFile = 'timeStamps_' + fileExt
 
 # split data at time gaps, if any
 dataChunks = analysisTools.getMatrixSubsets(data,analysisTools.checkDataForTimeGaps(data))
@@ -72,3 +77,20 @@ print('    saving timestamps to %s . . . ' % timeStampFile)
 with open(timeStampFile,'w') as f:
 	for t in binnedTime:
 		f.write('%s\n' % t)
+
+# concatenate files if necessary
+if len(sys.argv) > 1:
+    print('\n')
+
+    # removing any existing 'concatenated' files
+    import os
+    import glob
+    existingFiles = glob.glob('*concatenated*')
+    if len(existingFiles) > 0:
+        for file in existingFiles:
+            print('\n... removing existing ' + file + '\n')
+            os.remove(file)
+
+    analysisTools.concatenateCsv('distances')
+    analysisTools.concatenateCsv('timeStamps')
+    print('\nDone!\n')

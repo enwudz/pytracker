@@ -139,7 +139,7 @@ def getElapsedTime(videoType,vidInfo,startTime,endTime):
 def findROIsOnMask(m):
 	contours = cv2.findContours(m.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 	# Find OpenCV version
-	(major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
+	#(major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
 	contours = contours[0]
 
 	#contours = contours[0] if major_ver==2 else contours[1]
@@ -358,9 +358,13 @@ def getXspanYspanFromRectangle(lowerLeft,upperRight):
 	return (xspan,yspan)
 
 # make mask of CIRCULAR ROI, loading a mask and input well#
-def gridCircles(numWells):
+def gridCircles(numWells,rowsCols = 'grid'):
 
-	numRows,numCols = getRowsColsFromNumWells(numWells)
+	if rowsCols == 'grid':
+		numRows,numCols = getRowsColsFromNumWells(numWells)
+	else:
+		numRows,numCols = rowsCols
+
 	m = cv2.imread('mask.png',0)
 
 	vals = np.unique(m)
@@ -391,9 +395,13 @@ def gridCircles(numWells):
 	return b
 
 # make mask of rectangular/square ROI, loading a mask and input well#
-def gridRectangles(numWells):
+def gridRectangles(numWells,rowsCols = 'grid'):
 
-	numRows,numCols = getRowsColsFromNumWells(numWells)
+	if rowsCols == 'grid':
+		numRows,numCols = getRowsColsFromNumWells(numWells)
+	else:
+		numRows,numCols = rowsCols
+
 	#numRows,numCols = 1,3
 	m = cv2.imread('mask.png',0)
 
@@ -495,7 +503,7 @@ def findCircleInsideRectangle(upperLeft,lowerRight):
 
 # setup a mask from the selected rectangles.
 # within this function, can select grid of (r)ectangles or grid of (c)ircles
-def defineRectangleROI(videoStream,numWells,roiShape='r'):
+def defineRectangleROI(videoStream,numWells,roiShape='r',rowsCols='grid'):
 
 	global ix, iy, drawing, img
 
@@ -553,13 +561,16 @@ def defineRectangleROI(videoStream,numWells,roiShape='r'):
 	(mask, numROI) = findAndNumberROIs()
 
 	if numWells != 1:
+
+		# take number of wells, and turn into a minimal grid rows x cols
+
 		# can do rectangular
 		if roiShape == 'r':
-			mask = gridRectangles(numWells)
+			mask = gridRectangles(numWells,rowsCols)
 		# or circular
 		else:
-			mask = gridCircles(numWells)
-			# find and number??
+			mask = gridCircles(numWells,rowsCols)
+
 
 	elif roiShape == 'c':
 		# find center and radius of rectangle

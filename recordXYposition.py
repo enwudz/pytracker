@@ -27,7 +27,7 @@ vidInfo = trackingTools.setupVidInfo()
 # determine type of video source
 vidSource, videoType = trackingTools.getVideoStream(sys.argv)
 vidInfo['vidType'] = videoType
-	
+
 # acquire the pixel threshold from command line input or set to default
 if len(sys.argv) > 2:
 	pixThreshold = int(sys.argv[2])
@@ -76,7 +76,7 @@ centerCoords = [trackingTools.guessTheObject(roiSlices[r],maskSlices[r]) for r i
 
 # how often to save data, in frames
 # usually 9000 or 4500; 4500 is five minutes at 15 fps, about 6.5 minutes at 12 fps
-saveFreq = 9000 
+saveFreq = 9000
 i = 0 # a frame counter for saving chunks of data
 
 # preAllocate space for data matrix
@@ -87,67 +87,76 @@ fname = 'frame1-' + startTime.strftime('%y%m%d-%H%M%S') + '.png'
 cv2.imwrite(fname,oldFrame)
 frameTimes = np.empty(saveFreq)
 
-# go through and get differences and center of difference blobs
+#### MESSING WITH BACKGROUND SUBTRACTION
+fgbg = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=128,detectShadows=False)
+
+# go through video stream and get differences and center of difference blobs
 while(cap.isOpened()):
-	
+
 	# check if i bigger than saveFreq. If yes, save data to disk and reset values
-	if i >= saveFreq:    
-		print('saving data . . . ')   		
+	if i >= saveFreq:
+		print('saving data . . . ')
 		# here's the big chance to insert timestamps if desired!
 		data = np.insert(data,0,frameTimes,axis=1)
 		# save data
 		trackingTools.saveData(data,'xy')
 		# reset data and i (and timeStamps)
-		data = np.empty( [ saveFreq, 2 * numROI ] ) 
+		data = np.empty( [ saveFreq, 2 * numROI ] )
 		i = 0
 		frameTimes = np.empty(saveFreq)
-	
+
 	ret,currentFrame = cap.read()
-	
+
 	if ret == False or ( cv2.waitKey(1) & 0xFF == ord('q') ):
 		print('End of Video')
 		# save the data
 		break
-	
+
 	# get time of frame capture
 	frameTimes[i] = dates.date2num(datetime.now())
-	
-	# blur the frame
+
+	# blur the frame and convert to grayscale
 	blurFrame = trackingTools.grayBlur(currentFrame)
-	
+
+	### trying background subtraction MOG2
+	blurFrame = fgbg.apply(blurFrame, None, 0.01) # currentFrame OR blurFrame
+	# currentFrame if ONLY want to apply background subtraction
+	# blurFrame if want to apply blur AND background subtraction
+	# comment out completely if ONLY want to apply blur
+
 	# omit areas of image that are outside the ROI
 	blurFrame = trackingTools.removeNonROI(blurFrame,mask)
-	
+
 	# find difference image
-	diff = trackingTools.diffImage(oldFrame,blurFrame,pixThreshold,0)
-	oldFrame = blurFrame
-	
+	diff = trackingTools.diffImage(oldFrame,blurFrame,pixThreshold,0) # was blurFrame
+	oldFrame = blurFrame # was blurFrame
+
 	# slice diff image into ROIs
 	diffs = [trackingTools.getImageSliceFromCorners(diff,corner) for corner in roiCorners]
-	
+
 	# for now, do these in a for loop. Later = try to do list comprehension.
 	for r in range(numROI):
-		
+
 		# find center coordinates of blob in each diff image
 		if np.any(diffs[r]) == True:
 			centerCoords[r] = trackingTools.findCenterOfBlob(diffs[r])
-				
+
 		# smooth motion by finding average of last X frames
 		(centerCoords[r],storedPositions[r]) = trackingTools.smoothByAveraging(centerCoords[r],storedPositions[r])
-				
+
 		# update the center coordinate position by adding the offset for this ROI
 		centerCoordsOffset = tuple(map(sum, zip(centerCoords[r],roiOffsets[r])))
-						
+
 		# show on image with different colors for each ROI
 		cv2.circle(currentFrame, centerCoordsOffset, 4, roiColors[r], -1)
-		
+
 		# add data to matrix (with offset added)
 		data[i][r] = centerCoordsOffset[0] # x data
 		data[i][r+numROI] = centerCoordsOffset[1] # y data
-		
+
 	# add one to frame counter
 	i += 1
-	
+
 	# show the image
 	cv2.imshow('Press q to quit',currentFrame)
 
@@ -162,7 +171,7 @@ cap.release()
 cv2.destroyAllWindows()
 
 # concatenate the .npy files into a single file
-data = analysisTools.loadData('xy') 
+data = analysisTools.loadData('xy')
 
 # calculate or acquire elapsed time
 vidInfo = trackingTools.getElapsedTime(videoType,vidInfo,startTime,endTime)
@@ -171,7 +180,7 @@ vidInfo = trackingTools.getElapsedTime(videoType,vidInfo,startTime,endTime)
 vidInfo = trackingTools.calculateAndSaveFPS(data,vidInfo)
 
 if videoType != 0:
-	
+
 	# recorded movie: use fps to get appropriate values for timestamps
 	fps = int(vidInfo['fps'])
 	start = datetime.now()
@@ -183,6 +192,3 @@ if videoType != 0:
 
 # save the data!
 np.save('xyDataWithTimeStamps.npy',data)
-
-
-

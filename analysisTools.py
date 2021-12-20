@@ -82,12 +82,13 @@ def loadData(dataType='xy'):
 	return data
 
 # load data after a set time point
+# added 20210111 to deal with adding new data
 def loadDataFromStartTime(startTime, dataType = 'xy'):
 
     startYMD = int(startTime.split('-')[0])
     startHMS = int(startTime.split('-')[1])
 
-    print('Loading .npy files at and after ' + startTime)
+    print('Loading .npy files after ' + startTime)
     filenames = sorted(glob.glob(dataType+'*.npy'))
 
     if len(filenames) > 0: # checks to see if there are any files
@@ -100,14 +101,36 @@ def loadDataFromStartTime(startTime, dataType = 'xy'):
         fileTimeStamp = file.split(dataType)[1].split('.')[0]
         fileYMD = int(fileTimeStamp.split('-')[0])
         fileHMS = int(fileTimeStamp.split('-')[1])
-        if fileYMD >= startYMD and fileHMS >= startHMS:
+
+        if fileYMD >= startYMD and fileHMS > startHMS:
             d = np.load(file)
             if len(data) > 0:
                 data = np.vstack((data,d))
             else:
                 data = np.load(file)
-    return data
+    if len(data) == 0:
+        sys.exit('No .npy files to analyze')
+    else:
+        return data
 
+def concatenateCsv(searchString):
+    import shutil
+    import os
+
+    filenames = sorted(glob.glob(searchString+'*.csv'))
+    outFile = searchString + '_concatenated.csv'
+    with open(outFile,'wb') as wfd:
+        for f in filenames:
+            print('... adding ' + f + ' to ' + outFile)
+            with open(f,'rb') as fd:
+                shutil.copyfileobj(fd, wfd)
+
+# get time stamp of last .npy file
+def lastTimeStamp(dataType = 'xy'):
+    filenames = sorted(glob.glob(dataType+'*.npy'))
+    lastfile = filenames[-1]
+    lastFileSave = lastfile.split(dataType)[1].split('.')[0]
+    return lastFileSave
 
 # load information about the analyzed video
 def loadVidInfo():
