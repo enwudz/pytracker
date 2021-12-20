@@ -5,7 +5,7 @@ import numpy as np
 from scipy import stats
 
 ## COLORS
-# N colors distributed evenly across a color map
+# Get N colors distributed evenly across a color map
 # see https://matplotlib.org/examples/color/colormaps_reference.html for color maps
 def make_N_colors(cmap_name, N):
      cmap = cm.get_cmap(cmap_name, N)
