@@ -7,13 +7,12 @@
 # python npy2csv.py 201231-083544
 #     you can grab the '201231-083544' from the most recent 'distances' file
 
-
 import numpy as np
 import sys
 import analysisTools
 from matplotlib import dates
 
-binSize = 1
+binSize = 60
 
 # choose whether to get all of the data, or just those after a certain time
 if len(sys.argv) > 1: # if an start time specified, gather data AFTER that time
@@ -53,7 +52,16 @@ for i,data in enumerate(dataChunks):
     analysisTools.binData returns two outputs
     (1) binned data, (2) binned time vector
     '''
-
+    
+    # first, check to see if this chunk of data is longer than the binsize
+    # assumption here is that d is collected in seconds
+    timeVec = timeVec = data[:,0]
+    timeSpan = analysisTools.getElapsedTimeInSeconds(timeVec)
+    
+    if timeSpan < binSize:
+        print('This chunk (' + str(int(timeSpan)) + ' secs) is shorter than ' + str(binSize) + ' seconds')
+        continue
+   
     bd,bt = analysisTools.binData(d,binSize)
     print(' data in this chunk',np.shape(bd)) # could comment these out
     print(' times in this chunk',np.shape(bt)) # could comment these out
@@ -75,8 +83,8 @@ binnedTime = [dates.num2date(x).strftime('%Y-%m-%d %H:%M:%S') for x in binnedTim
 # save the binned time vector to a .csv file
 print('    saving timestamps to %s . . . ' % timeStampFile)
 with open(timeStampFile,'w') as f:
-	for t in binnedTime:
-		f.write('%s\n' % t)
+    for t in binnedTime:
+        f.write('%s\n' % t)
 
 # concatenate files if necessary
 if len(sys.argv) > 1:

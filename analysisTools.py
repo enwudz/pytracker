@@ -65,21 +65,21 @@ def getMatrixSubsets(mat,indices):
 # concatenate all data (in .npy files) into a single array
 # dataType is 'xy' or 'dpix' or 'xyData' or path
 def loadData(dataType='xy'):
-	print('Loading .npy files')
-	filenames = sorted(glob.glob(dataType+'*.npy'))
+    print('Loading .npy files')
+    filenames = sorted(glob.glob(dataType+'*.npy'))
 
-	if len(filenames) > 0: # checks to see if there are any files
-		firstFile = filenames.pop(0)
-	else:
-		sys.exit('No .npy files to analyze')
+    if len(filenames) > 0: # checks to see if there are any files
+        firstFile = filenames.pop(0)
+    else:
+        sys.exit('No .npy files to analyze')
 
-	data = np.load(firstFile)
+    data = np.load(firstFile)
 
-	if len(filenames) > 0:
-		for f in filenames:
-			d = np.load(f)
-			data = np.vstack((data,d))
-	return data
+    if len(filenames) > 0:
+        for f in filenames:
+            d = np.load(f)
+            data = np.vstack((data,d))
+    return data
 
 # load data after a set time point
 # added 20210111 to deal with adding new data
