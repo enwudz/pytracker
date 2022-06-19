@@ -21,7 +21,7 @@ trackingTools.checkForPreviousData('xy*.npy')
 # remove any previous xy data in this directory
 trackingTools.deleteData('xy*.npy')
 
-# setup video info dictionary
+# set up video info dictionary
 vidInfo = trackingTools.setupVidInfo()
 
 # determine type of video source
