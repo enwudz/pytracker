@@ -40,7 +40,7 @@ if len(sys.argv) < 2:
         exit('Usage: = %s nameOfFile (no .npy at end!)' % sys.argv[0])
 else:
     fileStem = sys.argv[1]
-    # add estimated timeStamps if needed
+    # add estimated timeStamps if they are not already there
 #     npy2timeStamp.main(fileStem)  
     data = analysisTools.loadData(fileStem)
 #     os.remove('xyDataWithTimeStamps.npy') # need this if run npy2timeStamp
