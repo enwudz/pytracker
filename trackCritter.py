@@ -6,14 +6,15 @@ Created on Wed Sep  7 21:02:29 2022
 @author: iwoods
 
 ffmpeg: 
-    ffmpeg -f image2 -r 30 -pattern_type glob -i 'tardicrawler*_frames*.png' -vcodec mpeg4 kristen_object.mp4
-        (removed -s 1280x720 from above)
     
+   ffmpeg -f image2 -r 30 -pattern_type glob -i '*_frames_*.png' -pix_fmt yuv420p -crf 20 AC_Sep22_preDrug_tardigrade1-1_path_times.mp4
+   https://video.stackexchange.com/questions/18547/simple-video-editing-software-that-can-handlethis/18549#18549 
+
 """
 
 import cv2
 import numpy as np
-import matplotlib as plt
+from matplotlib import cm
 import glob
 import sys
 from scipy import stats
@@ -48,6 +49,9 @@ def findCritter(video_file, background, pixThreshold = 25):
     fstem = video_file.split('.')[0]
     
     frame_number = 0
+    frames_in_video = getFrameCount(video_file) 
+    dot_colors = makeColorList('plasma', frames_in_video)
+    font = cv2.FONT_HERSHEY_SCRIPT_COMPLEX
     
     centroid_coordinates = [] # container for (x,y) coordinates of centroid of target object at each frame
     areas = [] # container for calculated areas of target object at each frame
@@ -72,9 +76,9 @@ def findCritter(video_file, background, pixThreshold = 25):
         # if more than one contour, make a decision about which contour is the target object
         # decision can be based on area of target ... or maybe last known position?
         if len(contours) > 1:
-            print(str(frame_number) + ' has more than one objected detected!')
+            print('frame ' + str(frame_number) + ' has more than one objected detected!')
             if len(areas) == 0:
-                target_area = 100 # just a guess
+                target_area = 10000 # just a guess
             else:
                 target_area = np.mean(areas)
             target = getTargetObject(contours, target_area)
@@ -85,23 +89,40 @@ def findCritter(video_file, background, pixThreshold = 25):
         # calculate moment of target object
         M = cv2.moments(target)
         # calculate x,y coordinate of center of M
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        # store coordinates
-        centroid_coordinates.append((cX,cY))
-        # show centroid on frame (color coded??)
-        cv2.circle(frame, (cX, cY), 5, (0, 255, 255), -1)
         
-        # get area of target object
-        target_area = cv2.contourArea(target)
-        areas.append(target_area)
+        if M["m00"] > 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            # store coordinates
+            centroid_coordinates.append((cX,cY))
+            # get area of target object
+            target_area = cv2.contourArea(target)
+            areas.append(target_area)
+        else:
+            print('skipping this frame, cannot find target object')
+        
+        # SHOW CENTROIDS
+        # show CURRENT (color coded) centroid on frame
+        # cv2.circle(frame, (cX, cY), 5, dot_colors[frame_number-1], -1)
+        # OR show ALL centroids so far on the frame
+        # frame  = addCoordinatesToFrame(frame, centroid_coordinates, dot_colors)
+        
+        # SHOW TIME STAMPS: show (color coded) time stamps on frame
+        # Get frame time and save it in a variable
+        # frameTime = int(vid.get(cv2.CAP_PROP_POS_MSEC))
+        # put the time variable on the video frame
+        # frame = cv2.putText(frame, str(frameTime / 1000).ljust(5,'0'),
+        #                     (100, 100), # position
+        #                     font, 2,
+        #                     dot_colors[frame_number-1], # color
+        #                     4, cv2.LINE_8)
+        
+        
     
-        # save frame to file
+        # SAVE FRAME TO FILE
         # saveFrameToFile(fstem, frame_number, frame) # frame or binary_frame
         
-        # show each frame as the movie plays
-        # ADD A TIME STAMP?? COLOR CODED??
-        # or add CENTROID? COLOR CODED?
+        # SHOW THE MOVIE 
         # cv2.imshow('press (q) to quit', frame) # frame or binary_frame
         # if cv2.waitKey(25) & 0xFF == ord('q'):
         #     break        
@@ -111,6 +132,27 @@ def findCritter(video_file, background, pixThreshold = 25):
     
     writeData(fstem + '_centroids', centroid_coordinates)
     writeData(fstem + '_areas', areas)
+
+def addCoordinatesToFrame(frame, coordinates, colors):
+    '''
+
+    Parameters
+    ----------
+    frame : open CV image
+    coordinates : list of tuples
+        a list of tuples of coordinates within frame
+    colors : list of colors
+        a list of tuples of cv2 formatted colors ... can be longer than coordinates list
+
+    Returns
+    -------
+    frame with a dot positioned at each coordinate
+
+    '''
+    for i, coord in enumerate(coordinates):
+        cv2.circle(frame, (coord[0], coord[1]), 5, colors[i], -1)
+
+    return frame
 
 def writeData(filestem, data):
     outfile = filestem + '.csv'
@@ -124,7 +166,19 @@ def writeData(filestem, data):
             
     o.close()
 
-def getTargetObject(contours, targetArea):
+def makeColorList(cmap_name, N):
+     cmap = cm.get_cmap(cmap_name, N)
+     cmap = cmap(np.arange(N))[:,0:3]
+     cmap = np.fliplr(cmap)
+     
+     # format for cv2 = 255 is max pixel intensity, colors are BGR     
+     cmap = cmap * 255 # for opencv colors
+     # convert RGB to BGR ... apparently no need! 
+     # cmap = [[color[0], color[1], color[2]] for i, color in enumerate(cmap)]
+
+     return [tuple(i) for i in cmap]
+
+def getTargetObject(contours, targetArea=100):
     '''
     Parameters
     ----------
@@ -139,7 +193,7 @@ def getTargetObject(contours, targetArea):
 
     '''
     
-    areas = [cv2.contourArea(cnt) for cnt in contours]
+    areas = np.array([cv2.contourArea(cnt) for cnt in contours])
     closest_index = np.argmin(np.abs(areas - targetArea))
     
     return contours[closest_index]
