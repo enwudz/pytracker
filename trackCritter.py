@@ -88,7 +88,6 @@ def findCritter(video_file, background, pixThreshold = 25):
         # get centroid of target object
         # calculate moment of target object
         M = cv2.moments(target)
-        # calculate x,y coordinate of center of M
         
         if M["m00"] > 0:
             cX = int(M["m10"] / M["m00"])
@@ -100,14 +99,16 @@ def findCritter(video_file, background, pixThreshold = 25):
             areas.append(target_area)
         else:
             print('skipping this frame, cannot find target object')
+            # to keep #centroids == #frames ... 
+            # append last centroid found
+            centroid_coordinates.append(centroid_coordinates[-1])
         
-        # SHOW CENTROIDS
-        # show CURRENT (color coded) centroid on frame
+        # ==> SHOW CENTROIDS: show (color coded) centroids on frame
         # cv2.circle(frame, (cX, cY), 5, dot_colors[frame_number-1], -1)
-        # OR show ALL centroids so far on the frame
+        # ==> OR show ALL centroids so far on the frame
         # frame  = addCoordinatesToFrame(frame, centroid_coordinates, dot_colors)
         
-        # SHOW TIME STAMPS: show (color coded) time stamps on frame
+        # ==> SHOW TIME STAMPS: show (color coded) time stamps on frame
         # Get frame time and save it in a variable
         # frameTime = int(vid.get(cv2.CAP_PROP_POS_MSEC))
         # put the time variable on the video frame
@@ -116,13 +117,11 @@ def findCritter(video_file, background, pixThreshold = 25):
         #                     font, 2,
         #                     dot_colors[frame_number-1], # color
         #                     4, cv2.LINE_8)
-        
-        
     
-        # SAVE FRAME TO FILE
+        # ==> SAVE FRAME TO FILE
         # saveFrameToFile(fstem, frame_number, frame) # frame or binary_frame
         
-        # SHOW THE MOVIE 
+        # ==> SHOW THE MOVIE (with centroids, times, or whatever is added) 
         # cv2.imshow('press (q) to quit', frame) # frame or binary_frame
         # if cv2.waitKey(25) & 0xFF == ord('q'):
         #     break        
@@ -178,7 +177,7 @@ def makeColorList(cmap_name, N):
 
      return [tuple(i) for i in cmap]
 
-def getTargetObject(contours, targetArea=100):
+def getTargetObject(contours, targetArea=10000):
     '''
     Parameters
     ----------
