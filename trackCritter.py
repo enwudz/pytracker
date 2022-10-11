@@ -9,6 +9,8 @@ ffmpeg:
     
    ffmpeg -f image2 -r 30 -pattern_type glob -i '*_frames_*.png' -pix_fmt yuv420p -crf 20 AC_Sep22_preDrug_tardigrade1-1_path_times.mp4
    https://video.stackexchange.com/questions/18547/simple-video-editing-software-that-can-handlethis/18549#18549 
+   
+Wish list:
 
 """
 
@@ -27,12 +29,6 @@ def main(movie_file):
     # run through video and compare each frame with background
     findCritter(movie_file, background_image, 25)
     
-    # bw = cv2.imread('frame_binary_tester.png')
-    # cv2.imshow('press (q) to quit', bw)
-    # cv2.waitKey()
-    # cv2.destroyAllWindows()   
-    # getCentroid(bw, 100)
-    
     return
 
 def findCritter(video_file, background, pixThreshold = 25):
@@ -40,6 +36,7 @@ def findCritter(video_file, background, pixThreshold = 25):
     # go through video
     print('... starting video ' + video_file)
     vid = cv2.VideoCapture(video_file)
+    fps = vid.get(5)
     
     # print out video info
     printVidInfo(vid, True)
@@ -59,6 +56,8 @@ def findCritter(video_file, background, pixThreshold = 25):
     while vid.isOpened():
         ret, frame = vid.read()
         frame_number += 1
+        # frameTime = int(vid.get(cv2.CAP_PROP_POS_MSEC)) # this returns zeros at end of video
+        frameTime = float(frame_number)/fps
         
         if (ret != True):  # no frame!
             print('... video end!')
@@ -76,12 +75,16 @@ def findCritter(video_file, background, pixThreshold = 25):
         # if more than one contour, make a decision about which contour is the target object
         # decision can be based on area of target ... or maybe last known position?
         if len(contours) > 1:
-            print('frame ' + str(frame_number) + ' has more than one objected detected!')
+            print('frame ' + str(frame_number) + ' has ' + str(len(contours)) + ' detected objects!')
             if len(areas) == 0:
-                target_area = 10000 # just a guess
+                target_area = 4000 # just a guess
+                current_loc = (10,10)
             else:
                 target_area = np.mean(areas)
-            target = getTargetObject(contours, target_area)
+                current_x = centroid_coordinates[-1][1]
+                current_y = centroid_coordinates[-1][2]
+                current_loc = np.array([current_x, current_y])
+            target = getTargetObject(contours, current_loc, target_area)
         else:
             target = contours[0]
             
@@ -92,8 +95,7 @@ def findCritter(video_file, background, pixThreshold = 25):
         if M["m00"] > 0:
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
-            # store coordinates
-            centroid_coordinates.append((cX,cY))
+            
             # get area of target object
             target_area = cv2.contourArea(target)
             areas.append(target_area)
@@ -101,7 +103,9 @@ def findCritter(video_file, background, pixThreshold = 25):
             print('skipping this frame, cannot find target object')
             # to keep #centroids == #frames ... 
             # append last centroid found
-            centroid_coordinates.append(centroid_coordinates[-1])
+        
+        # store coordinates
+        centroid_coordinates.append((frameTime,cX,cY))
         
         # ==> SHOW CENTROIDS: show (color coded) centroids on frame
         # cv2.circle(frame, (cX, cY), 5, dot_colors[frame_number-1], -1)
@@ -109,8 +113,6 @@ def findCritter(video_file, background, pixThreshold = 25):
         # frame  = addCoordinatesToFrame(frame, centroid_coordinates, dot_colors)
         
         # ==> SHOW TIME STAMPS: show (color coded) time stamps on frame
-        # Get frame time and save it in a variable
-        # frameTime = int(vid.get(cv2.CAP_PROP_POS_MSEC))
         # put the time variable on the video frame
         # frame = cv2.putText(frame, str(frameTime / 1000).ljust(5,'0'),
         #                     (100, 100), # position
@@ -177,25 +179,45 @@ def makeColorList(cmap_name, N):
 
      return [tuple(i) for i in cmap]
 
-def getTargetObject(contours, targetArea=10000):
+def getTargetObject(contours, current_loc, targetArea=5000):
     '''
     Parameters
     ----------
     contours : list of contours from cv2.findContours
         object is white, background is black
+    current_loc : tuple of coordinates of last known position of object
     targetArea : integer
         expected or calculated area (in pixels) of target object.
 
     Returns
     -------
-    the contour from within contours that is closest in area to targetArea
+    the contour from within contours that is closest in position (and area)
 
     '''
     
-    areas = np.array([cv2.contourArea(cnt) for cnt in contours])
-    closest_index = np.argmin(np.abs(areas - targetArea))
+    # find the contour that is closest to the last known position
+    moments = [cv2.moments(cnt) for cnt in contours]
+    try:
+        xcoords = [int(M["m10"] / M["m00"]) for M in moments]
+        ycoords = [int(M["m01"] / M["m00"]) for M in moments]
+    except:
+        print(' ... trouble finding object')
+        return contours[0]
     
-    return contours[closest_index]
+    coords = [np.array([x,ycoords[i]]) for i,x in enumerate(xcoords)]
+    distances = [np.linalg.norm(current_loc - coord) for coord in coords]
+    closest_in_distance = np.argmin(distances)
+
+    # find the contour with the closest area
+    areas = np.array([cv2.contourArea(cnt) for cnt in contours])
+    closest_in_area = np.argmin(np.abs(areas - targetArea))
+    
+    if closest_in_distance != closest_in_area:
+        print(' ... target uncertain, choosing the one that is closest to last known position')
+    else:
+        print(' ... choosing the target that is closest in position and size')
+    
+    return contours[closest_in_distance]
 
 def getBinaryFrame(frame, background, pixThreshold):
     
@@ -323,6 +345,7 @@ def getFrameCount(videofile):
     cap = cv2.VideoCapture(videofile)
     num_frames = int(cap.get(cv2. CAP_PROP_FRAME_COUNT))
     print('... number of frames in ' + videofile + ' : ' + str(num_frames) )
+    cap.release()
     return num_frames
 
 def getFirstFrame(videofile):

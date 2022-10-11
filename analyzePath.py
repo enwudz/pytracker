@@ -17,13 +17,14 @@ import scipy.signal
 
 '''
 WISH LIST
-DONE Display the last frame of the video, with color-coded centroid path DONE
 
-On side, add text with video name, object area, distance, speed
-    ^^^ or as x axis label?
+Upon finding turns and stops, save new centroids file with these annotations
 
-DONE So, need to code to calculate speed and distance. May want to SMOOTH before speed.
-
+Video demonstrations - may be best to create a new script that does this ... 
+    from centroid coordinates (with frame times) (and annotations from file above?)
+    show turns (with decreasing alpha each frame) 
+        and stops as text on the movie frames. 
+        
 '''
 
 def main(centroid_file):
@@ -31,36 +32,86 @@ def main(centroid_file):
     # get height, width, fps from filestem
     filestem = centroid_file.split('_centroids')[0]
     movie_file = filestem + '.mov'
-    (vid_width, vid_height, vid_fps, vid_frames, vid_length) = getVideoData(movie_file, True)
-    
-    # get last frame of movie
-    f, a = plt.subplots(1, figsize=(14,6))
-    frame = getLastFrame(movie_file)
-    a.imshow(frame)
-    
+    (vid_width, vid_height, vid_fps, vid_frames, vid_length) = getVideoData(movie_file, False)
+        
     # get median tardigrade size (i.e. area in pix^2)
     area = getAreas(filestem)
     
     # read in coordinates
-    df = pd.read_csv(centroid_file, names = ['x','y'], header=None) 
+    df = pd.read_csv(centroid_file, names = ['frametime','x','y'], header=None)
+    frametimes = df.frametime.values
     xcoords = df.x.values
     ycoords = df.y.values
     
-    # smooth the data?
+    # smooth the data!
     smoothedx = smoothFiltfilt(xcoords,3,0.05)
     smoothedy = smoothFiltfilt(ycoords,3,0.05)
-    
-    # ==> a line plot to compare raw path with smoothed path
-    # plt.plot(xcoords,ycoords, linewidth=8, color = 'forestgreen', label = 'raw') # raw coordinates
-    # plt.plot(smoothedx,smoothedy, linewidth=2, color = 'lightgreen', label = 'smoothed') # smoothed
-    # plt.legend() 
-    # print(len(xcoords),len(smoothedx))
-    
+     
     # calculate distance from smoothed data
     distance = cumulativeDistance(smoothedx, smoothedy)
-    #print('Distance = ' + str(distance_traveled))
     
-    # plot (scatter) centroids with colormap that shows time
+    # calculate # of turns, # of speed changes (from smoothed data)
+    time_increment = 0.5 # in seconds
+    num_stops, discrete_turns, angle_space, stop_times, turn_times = turnsStartsStops(frametimes, smoothedx, smoothedy, vid_fps, time_increment)
+    
+    # ==> line plot to compare raw path with smoothed path
+    # f, a = plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy)
+    
+    # ==> scatter plot of centroids along path with colormap that shows time
+    # f, a = plotPathScatter(filestem, xcoords, ycoords, vid_length)      
+    
+    # ==> add labels from experiment and show plot:
+    # a.set_xlabel(getDataLabel(area, distance, vid_length, angle_space, discrete_turns, num_stops ))
+    # plt.title(filestem)
+    # plt.show()
+    
+    # print out data
+    initials, date, treatment, tardistring = filestem.split('_')
+    tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
+    datastring = filestem + ',' + str(getScale(filestem))
+    datastring += ',' + ','.join([initials,date,treatment,tardigrade])
+    datastring += ',' + ','.join([str(x) for x in [vid_length, area, distance, discrete_turns, angle_space, num_stops]])  
+    print(datastring)
+    
+    return stop_times, turn_times
+
+
+def getScale(filestem):
+    
+    scaleFile = glob.glob('*scale.txt')
+    if len(scaleFile) > 0:
+        with open(scaleFile[0],'r') as f:
+            stuff = f.readlines()
+            for thing in stuff:
+                if '=' in thing:
+                    scale = float(thing.split('=')[1])
+                else:
+                    scale = float(thing)
+    else:
+        print('no scale for ' + filestem)
+        micrometerFiles = glob.glob('*micrometer*')
+        if len(micrometerFiles) > 0:
+            import measureImage
+            micrometerFile = micrometerFiles[0]
+            scale = float(measureImage.main(micrometerFile))
+            
+        else:
+            print('no micrometer image ... ')
+            scale = 1
+    
+    #print('Scale is ' + str(scale))
+    return scale
+
+def plotPathScatter(filestem, xcoords, ycoords, vid_length): 
+      
+    # get last frame of movie
+    movie_file = filestem + '.mov'
+    first_frame = getFrame(movie_file,'first')
+    last_frame = getFrame(movie_file,'last')
+    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    
+    f, a = plt.subplots(1, figsize=(14,6))
+    a.imshow(combined_frame) # combined_frame or last_frame
     cmap_name = 'plasma'
     cmap = mpl.cm.get_cmap(cmap_name)
     cols = cmap(np.linspace(0,1,len(xcoords)))
@@ -69,30 +120,38 @@ def main(centroid_file):
     a.set_yticks([])
     # add legend for time
     norm = mpl.colors.Normalize(vmin=0, vmax=vid_length)
-    plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label = 'Time (sec)')
+    plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), label = 'Time (sec)')   
 
-    # calculate # of turns, # of speed changes (from smoothed data)
-    time_increment = 1 # in seconds
-    speed_changes, discrete_turns, angle_space = turnsStartsStops(smoothedx, smoothedy, vid_fps, time_increment)
+    return f, a
 
-    # ==> add labels from experiment:
-    plt.title(filestem)
-    a.set_xlabel(getDataLabel(area, distance, vid_length))
+def plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy):
     
-    # Show the plot
-    plt.show()
+    # get first and last frame of movie
+    movie_file = filestem + '.mov'
+    first_frame = getFrame(movie_file,'first')
+    last_frame = getFrame(movie_file,'last')
+    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
     
-    return
+    f, a = plt.subplots(1, figsize=(14,6))
+    a.imshow(combined_frame) # combined_frame or last_frame
+    plt.plot(xcoords,ycoords, linewidth=8, color = 'forestgreen', label = 'raw') # raw coordinates
+    plt.plot(smoothedx,smoothedy, linewidth=2, color = 'lightgreen', label = 'smoothed') # smoothed
+    plt.legend() 
+    return f, a
 
-def turnsStartsStops(xcoords, ycoords, vid_fps, increment):
+def turnsStartsStops(times, xcoords, ycoords, vid_fps, increment):
     '''
     From x and y coordinates of a path, group into increments of length binsize
-    estimate the number of times there is a change in speed greater than a specified threshold
+    
+    estimate the number of times the tardgirade stops (where speed is < threshold)
     estimate the number of discrete turns in the path (where angle of turn > threshold)
     estimate the total amount of angle space explored along the path
+    [old code] estimate the number of times there is a change in speed greater than a specified threshold
 
     Parameters
     ----------
+    times : numpy array
+        times of each video frame
     xcoords : numpy array
         x coordinates
     ycoords : numpy array
@@ -104,9 +163,11 @@ def turnsStartsStops(xcoords, ycoords, vid_fps, increment):
 
     Returns
     -------
-    speed_changes = integer amount of # of changes in speed
+    
+    num_stops = integer amount of # of stops
     discrete_turns = integer amount of # of turns
     angle_space = floating point number of cumulative changes in path angle
+    [old code] speed_changes = integer amount of # of changes in speed
 
     '''
     
@@ -122,11 +183,14 @@ def turnsStartsStops(xcoords, ycoords, vid_fps, increment):
     # get average speed
     average_speed = np.around(path_distance / video_length, decimals = 2)
     
-    # get speeds and angles for each bin
+    # bin the times and coordinates
+    binned_time = binList(times, points_in_bin)
     binned_x = binList(xcoords, points_in_bin)
     binned_y = binList(ycoords, points_in_bin)
     speeds = np.zeros(len(binned_x))
     bearings = np.zeros(len(binned_x))
+    
+    # calculate speed and angle for each bin
     for i, xbin in enumerate(binned_x): # could probably do list comprehension
         start_coord = np.array([xbin[0], -binned_y[i][0]]) # we do -y because y=0 is the top of the image
         end_coord = np.array([xbin[-1], -binned_y[i][-1]])
@@ -140,52 +204,122 @@ def turnsStartsStops(xcoords, ycoords, vid_fps, increment):
         bearings[i] = getBearing(start_coord, end_coord)
         # print(start_coord, end_coord, angles[i])
         
+    # just printing the turn angles to test things out
+    # np.set_printoptions(suppress=True)
+    # print(bearings)
+    
     # ==> from speeds and angles, FIND speedChanges, discrete_turns, angle_space
     # DEFINE THRESHOLDS for changes in speed or direction
-    # for speed, define a change in speed as a change that is greater than
-    #     33%(?) of the average speed across the path
     # for turn, define a discrete turn as a turn that is greater than 
-    #     30(?) degrees ... when SPEED is above a certain threshold?
-    speed_change_percentage_threshold = 33 # percent of average speed
-    turn_degree_threshold = 30 # degrees
+    #     X (?) degrees ... when SPEED is above a certain threshold?
+    # for stops, define a stop as an interval with speed < X% of average speed
+    #     X% (?) of the average speed across the path?
+    # [old code] for speed changes, define a change in speed as a change that is greater than
+    #     X% (?) of the average speed across the path
+    
+    # [old] speed change threshold 
+    # [old] speed_change_percentage_threshold = 33 # percent of average speed
     # what is the magnitude of a 'real' change in speed?
-    speed_change_threshold = np.around(speed_change_percentage_threshold/100 * average_speed, decimals = 2)
+    # [old] speed_change_threshold = np.around(speed_change_percentage_threshold/100 * average_speed, decimals = 2)
+    # print('speed change threshold: ', speed_change_threshold)
+    
+    # define stop thresholds
+    stop_percentage_threshold = 50 # percent of average speed
+    stop_magnitude_threshold = np.around(stop_percentage_threshold/100 * average_speed, decimals = 2)
+    #print('threshold for STOP: ', stop_magnitude_threshold)
+    moving = True # current state of the movement (False if 'stopped')
+    
+    # define discrete turn thresholds
+    turn_degree_threshold = 28 # degrees
+    #print('threshold (degrees) for discrete turn: ', turn_degree_threshold)
    
     # set counters to zero 
-    speed_changes = 0   # changes in speed that meet the thresholds above
+    # speed_changes = 0   # changes in speed that meet the thresholds above
+    num_stops = 0       # number of times the speed slows before a defined threshold
     discrete_turns = 0  # changes in bearing that meet the thresholds above
     angle_space = 0     # cumulative total of changes in bearing
     
-    print('speed change threshold: ', speed_change_threshold)
+    # keep track of which bins have no movement (i.e. stops)
+    stop_times = []
+    
+    # keep track of which bins have turns
+    turn_times = []
+    
     for i, speed in enumerate(speeds[:-1]):
         
+        # [old code for speed change threshold]
         # what was the change in speed?
-        delta_speed = np.abs(speeds[i+1] - speeds[i])
+        # delta_speed = np.abs(speeds[i+1] - speeds[i])
+        # # was this a 'discrete' change in speed?
+        # if delta_speed >= speed_change_threshold:
+        #     #print('change in speed: ', delta_speed)
+        #     speed_changes += 1
         
-        # was this a 'discrete' change in speed?
-        if delta_speed >= speed_change_threshold:
-            #print('change in speed: ', delta_speed)
-            speed_changes += 1
-            
-        # what was the change in bearing?
-        delta_bearing = np.abs(bearings[i+1]-bearings[i])
+        # Decide if this bin is a STOP
+        if moving: # moving = True, the critter was MOVING before this bin
+            # is the critter moving now?
+            if speed <= stop_magnitude_threshold:
+                moving = False # this critter WAS moving but now it has STOPPED!
+                num_stops += 1
+                stop_times.append(binned_time[i])
+            # the critter was MOVING before, and it is still moving,
+            # so we leave moving=True
+
+        else: # moving = False, the critter was STOPPED before this bin
+             # is the critter moving now?
+             if speed > stop_magnitude_threshold:
+                 moving = True # this critter was STOPPED but now it is moving!
+             # if it is not moving before now,
+             # and it is not moving now,
+             # then we just leave moving=FALSE 
+        
+        # What was the change in bearing between this bin and the previous one? 
+        # need some care:  if successive bearings cross north (i.e. 0/360) ...
+        # both will be near (within ~20 degrees) of 0 or 360
+        # and so we need to adjust how we calculate difference in bearing
+        if bearings[i] < 20 and bearings[i+1] > 340: # the path crossed North
+            delta_bearing = bearings[i] + 360 - bearings[i+1]
+        elif bearings[i] > 340 and bearings[i+1] < 20: # the path crossed North
+            delta_bearing = 360 - bearings[i] + bearings[i+1]
+        else:
+            delta_bearing = np.abs(bearings[i+1]-bearings[i])
         angle_space += delta_bearing # cumulative total of changes in bearing
         
-        # was this a 'discrete' change in bearing (i.e. a 'turn')?
-        if speed >= speed_change_threshold and delta_bearing >= turn_degree_threshold:
+        # Decide if this bin is a 'discrete' change in bearing (i.e. a 'turn')?
+        if moving and delta_bearing >= turn_degree_threshold:
             #print('A TURN!')
             discrete_turns += 1
+            turn_times.append(binned_time[i])
     
     angle_space = np.around(angle_space, decimals=2)
-    printMe = True
+    printMe = False
     if printMe == True:
-        printString = 'Speed changes: ' + str(speed_changes)
+        #printString = 'Speed changes: ' + str(speed_changes)
+        printString = 'Stops: ' + str(num_stops)
         printString += ', Discrete turns: ' + str(discrete_turns)
         printString += ', Explored angles: ' + str(angle_space)
         print(printString)
-    return speed_changes, discrete_turns, angle_space
+    
+    return num_stops, discrete_turns, angle_space, stop_times, turn_times
 
 def getBearing(p1, p2):
+    '''
+    Given two coordinates, calculate the bearing of the direction of a line
+    connecting the first point with the second. Bearing is 0 (North) - 360
+
+    Parameters
+    ----------
+    p1 : tuple
+        x and y coordinate of point 1
+    p2 : tuple
+        x and y coordinate of point 1.
+
+    Returns
+    -------
+    bearing : floating point decimal
+        Bearing between x and y. 0 = North/Up, 90 = East/Right, 180 = South/Down, 270 = West/Left
+
+    '''
     deltaX = p2[0]-p1[0]
     deltaY = p2[1]-p1[1]
     degrees = np.arctan2(deltaX,deltaY) / np.pi * 180
@@ -194,24 +328,62 @@ def getBearing(p1, p2):
     return np.around(degrees, decimals = 2)
 
 def binList(my_list, bin_size):
+    '''
+    Break up a list into a list of lists, where each list has length of bin_size
+
+    Parameters
+    ----------
+    my_list : a list
+        list of anything.
+    bin_size : integer
+        number of items in each bin.
+
+    Returns
+    -------
+    binned_list : list (of lists)
+        a list of lists, where each list has length of bin_size.
+
+    '''
     binned_list = [my_list[x:x+bin_size] for x in range(0, len(my_list), bin_size)]
     return binned_list
 
-def getDataLabel(area, distance, vid_length, pix1mm = None): # convert from pixels?
+def getDataLabel(area, distance, vid_length, angle_space = 0, discrete_turns = 0, num_stops = 0): 
+    # convert from pixels?
     speed = np.around(distance/vid_length, decimals = 2)
     data_label = 'Area : ' + str(area)
     data_label += ', Distance : ' + str(distance)
     data_label += ', Time: ' + str(vid_length)
     data_label += ', Speed: ' + str(speed)
-    # turns
-    # speed changes
+    data_label += ', Stops: ' + str(num_stops)
+    
+    # angle space
+    if angle_space > 0:
+        data_label += ', Angles explored: ' + str(angle_space)
+        data_label += ', Turns: ' + str(discrete_turns)
+    
     return data_label
 
 def getAreas(filestem):
+    '''
+    read in areas from a file
+    where the file name is filestem_areas.csv
+    and return the median area
+
+    Parameters
+    ----------
+    filestem : string
+        The name of the video, with .mov removed.
+
+    Returns
+    -------
+    median of the areas : floating point decimal
+        The median of a list of areas.
+
+    '''
     area_file = filestem + '_areas.csv'
     try:
         f = open(area_file,'r')
-        print('Getting areas from ' + area_file)
+        #print('Getting areas from ' + area_file)
     except:
         exit('Cannot find ' + area_file)
     areas = [float(x.rstrip()) for x in f.readlines()]
@@ -223,64 +395,77 @@ def getAreas(filestem):
     return np.median(areas)
 
 def cumulativeDistance(x,y):
+    '''
+    Given a list of x and y points, calculate the cumulative distance of a path
+    connecting the first x,y with the last x,y
+
+    Parameters
+    ----------
+    x : list
+        list of x coordinates.
+    y : list
+        list of y coordinates..
+
+    Returns
+    -------
+    cumulative_distance : floating point decimal
+        the distance of the path connecting the first point with the last point.
+
+    '''
     # adapted from https://stackoverflow.com/questions/65134556/compute-cumulative-euclidean-distances-between-subsequent-pairwise-coordinates
     XY = np.array((x, y)).T
     cumulative_distance = np.linalg.norm(XY - np.roll(XY, -1, axis=0), axis=1)[:-1].sum()
     return np.around(cumulative_distance, decimals = 2)
 
 def smoothFiltfilt(x, pole=3, freq=0.1):
-    # adapted from https://swharden.com/blog/2020-09-23-signal-filtering-in-python/
-    # output length is same as input length
-    # as freq increases, signal is smoothed LESS
+    
+    '''
+    adapted from https://swharden.com/blog/2020-09-23-signal-filtering-in-python/
+    output length is same as input length
+    as freq increases, signal is smoothed LESS
+    
+    Parameters
+    ----------
+    x : numpy array
+        numpy array of x or y coordinates
+    pole : integer
+        see documentation.
+    freq : floating point decimal between 0 and 1
+        see documentation
+
+    Returns
+    -------
+    filtered: numpy array
+        smoothed data
+    
+    '''
     
     b, a = scipy.signal.butter(pole, freq)
     filtered = scipy.signal.filtfilt(b,a,x)
     return filtered
 
-def smoothConvolve(x,window_len=11,window='hanning'):
-    # adapted from https://scipy-cookbook.readthedocs.io/items/SignalSmooth.html
-    # output from this is NOT the same size as input!
-    # ... so not great when calculating distance
-    
-    if x.ndim != 1:
-        exit("smooth only accepts 1 dimension arrays.")
-    
-    if x.size < window_len:
-        exit("Input vector needs to be bigger than window size.")
-    
-    if window_len<3:
-        return x
-    
-    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        exit("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
-        
-    s=np.r_[x[window_len-1:0:-1],x,x[-2:-window_len-1:-1]]
-    
-    print(len(x), len(s))
-    
-    if window == 'flat': #moving average
-        w = np.ones(window_len,'d')
-    else:
-        w = eval('np.'+window+'(window_len)')
-        
-    smoothed = np.convolve(w/w.sum(),s,mode='valid')
-    return smoothed 
-
-def getLastFrame(videoFile):
+def getFrame(videoFile, frame_pos = 'last'):
     vid = cv2.VideoCapture(videoFile)
 
-    for i in range(50): # sometimes cannot get last frame!?
-    
-        last_frame_num = int(vid.get(cv2.CAP_PROP_FRAME_COUNT)) - i
-        vid.set(cv2.CAP_PROP_POS_FRAMES, last_frame_num)
-        ret, frame = vid.read()
+    if frame_pos == 'first':
+        ret,frame = vid.read()
+        vid.release()
+        return frame
+
+    else:
+        for i in range(50): # sometimes cannot get last frame!?
         
-        if ret == True:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            print('Got last frame at movie end - ' + str(i+1) + ' frames')
-            return frame
-        
-    exit('Cannot get last frame in ' + str(i+1) + ' tries')
+            last_frame_num = int(vid.get(cv2.CAP_PROP_FRAME_COUNT)) - i
+            vid.set(cv2.CAP_PROP_POS_FRAMES, last_frame_num)
+            ret, frame = vid.read()
+            
+            if ret == True:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # print('Got last frame at movie end - ' + str(i+1) + ' frames')
+                vid.release()
+                return frame
+        vid.release()    
+        exit('Cannot get last frame in ' + str(i+1) + ' tries')
             
 
 def getVideoData(videoFile, printOut = True):
@@ -313,7 +498,7 @@ if __name__ == "__main__":
         centroid_list = glob.glob('*centroid*')
         centroid_file = centroid_list[0]
         
-    print('Getting data from ' + centroid_file)
+    #print('Getting data from ' + centroid_file)
 
     main(centroid_file)
 
