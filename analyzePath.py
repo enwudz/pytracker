@@ -18,16 +18,11 @@ import scipy.signal
 '''
 WISH LIST
 
-Upon finding turns and stops, save new centroids file with these annotations
-
-Video demonstrations - may be best to create a new script that does this ... 
-    from centroid coordinates (with frame times) (and annotations from file above?)
-    show turns (with decreasing alpha each frame) 
-        and stops as text on the movie frames. 
         
 '''
 
-def main(centroid_file):
+def main(centroid_file, plot_style = 'line'): # scatter or line
+    # plot_style = 'none' # 'scatter' or 'line' or comment out
     
     # get height, width, fps from filestem
     filestem = centroid_file.split('_centroids')[0]
@@ -54,16 +49,22 @@ def main(centroid_file):
     time_increment = 0.5 # in seconds
     num_stops, discrete_turns, angle_space, stop_times, turn_times = turnsStartsStops(frametimes, smoothedx, smoothedy, vid_fps, time_increment)
     
-    # ==> line plot to compare raw path with smoothed path
-    # f, a = plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy)
+    if plot_style != 'none':
+        
+        if plot_style == 'line':
+            # ==> line plot to compare raw path with smoothed path
+            f, a = plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy)
+        
+        else:
+            # ==> scatter plot of centroids along path with colormap that shows time
+            f, a = plotPathScatter(filestem, xcoords, ycoords, vid_length)      
     
-    # ==> scatter plot of centroids along path with colormap that shows time
-    # f, a = plotPathScatter(filestem, xcoords, ycoords, vid_length)      
-    
-    # ==> add labels from experiment and show plot:
-    # a.set_xlabel(getDataLabel(area, distance, vid_length, angle_space, discrete_turns, num_stops ))
-    # plt.title(filestem)
-    # plt.show()
+        # ==> add labels from experiment and show plot:
+        a.set_xlabel(getDataLabel(area, distance, vid_length, angle_space, discrete_turns, num_stops ))
+        a.set_xticks([])
+        a.set_yticks([])
+        plt.title(filestem)
+        plt.show()
     
     # print out data
     initials, date, treatment, tardistring = filestem.split('_')
@@ -286,7 +287,8 @@ def turnsStartsStops(times, xcoords, ycoords, vid_fps, increment):
         angle_space += delta_bearing # cumulative total of changes in bearing
         
         # Decide if this bin is a 'discrete' change in bearing (i.e. a 'turn')?
-        if moving and delta_bearing >= turn_degree_threshold:
+        # if moving and delta_bearing >= turn_degree_threshold:
+        if delta_bearing >= turn_degree_threshold:
             #print('A TURN!')
             discrete_turns += 1
             turn_times.append(binned_time[i])

@@ -7,7 +7,7 @@ Created on Wed Sep  7 21:02:29 2022
 
 ffmpeg: 
     
-   ffmpeg -f image2 -r 30 -pattern_type glob -i '*_frames_*.png' -pix_fmt yuv420p -crf 20 AC_Sep22_preDrug_tardigrade1-1_path_times.mp4
+   ffmpeg -f image2 -r 30 -pattern_type glob -i '*_frames_*.png' -pix_fmt yuv420p -crf 20 demo_outline_centroid_cool.mp4
    https://video.stackexchange.com/questions/18547/simple-video-editing-software-that-can-handlethis/18549#18549 
    
 Wish list:
@@ -47,8 +47,8 @@ def findCritter(video_file, background, pixThreshold = 25):
     
     frame_number = 0
     frames_in_video = getFrameCount(video_file) 
-    dot_colors = makeColorList('plasma', frames_in_video)
-    font = cv2.FONT_HERSHEY_SCRIPT_COMPLEX
+    dot_colors = makeColorList('cool', frames_in_video)
+    font = cv2.FONT_HERSHEY_DUPLEX
     
     centroid_coordinates = [] # container for (x,y) coordinates of centroid of target object at each frame
     areas = [] # container for calculated areas of target object at each frame
@@ -70,15 +70,15 @@ def findCritter(video_file, background, pixThreshold = 25):
         contours, hierarchy = cv2.findContours(binary_frame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         
         # draw contours on the original frame
-        cv2.drawContours(frame, contours, -1, (0,255,0), 5)
+        # cv2.drawContours(frame, contours, -1, (0,255,0), 5)
         
         # if more than one contour, make a decision about which contour is the target object
         # decision can be based on area of target ... or maybe last known position?
         if len(contours) > 1:
             print('frame ' + str(frame_number) + ' has ' + str(len(contours)) + ' detected objects!')
             if len(areas) == 0:
-                target_area = 4000 # just a guess
-                current_loc = (10,10)
+                target_area = 10000 # just a guess
+                current_loc = (400,400)
             else:
                 target_area = np.mean(areas)
                 current_x = centroid_coordinates[-1][1]
@@ -108,7 +108,7 @@ def findCritter(video_file, background, pixThreshold = 25):
         centroid_coordinates.append((frameTime,cX,cY))
         
         # ==> SHOW CENTROIDS: show (color coded) centroids on frame
-        # cv2.circle(frame, (cX, cY), 5, dot_colors[frame_number-1], -1)
+        # cv2.circle(frame, (cX, cY), 10, dot_colors[frame_number-1], -1)
         # ==> OR show ALL centroids so far on the frame
         # frame  = addCoordinatesToFrame(frame, centroid_coordinates, dot_colors)
         
