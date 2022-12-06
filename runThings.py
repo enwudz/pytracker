@@ -10,12 +10,11 @@ import glob
 import trackCritter
 import analyzePath
 
-# movieFiles = glob.glob('*.mov')
-# for file in sorted(movieFiles):
-#     trackCritter.main(file)
+movieFiles = glob.glob('*.mov')
+for file in sorted(movieFiles):
+    trackCritter.main(file)
 
 centroidFiles = glob.glob('*centroid*')
 for file in sorted(centroidFiles):
     analyzePath.main(file)
-    
     

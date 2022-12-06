@@ -109,7 +109,11 @@ def plotPathScatter(filestem, xcoords, ycoords, vid_length):
     movie_file = filestem + '.mov'
     first_frame = getFrame(movie_file,'first')
     last_frame = getFrame(movie_file,'last')
-    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    
+    if np.shape(first_frame) == np.shape(last_frame):
+        combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    else:
+        combined_frame = first_frame
     
     f, a = plt.subplots(1, figsize=(14,6))
     a.imshow(combined_frame) # combined_frame or last_frame
@@ -131,7 +135,11 @@ def plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy):
     movie_file = filestem + '.mov'
     first_frame = getFrame(movie_file,'first')
     last_frame = getFrame(movie_file,'last')
-    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    
+    if np.shape(first_frame) == np.shape(last_frame):
+        combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    else:
+        combined_frame = first_frame
     
     f, a = plt.subplots(1, figsize=(14,6))
     a.imshow(combined_frame) # combined_frame or last_frame
@@ -447,7 +455,7 @@ def smoothFiltfilt(x, pole=3, freq=0.1):
     return filtered
 
 def getFrame(videoFile, frame_pos = 'last'):
-    vid = cv2.VideoCapture(videoFile)
+    vid = cv2.VideoCapture(videoFile)    
 
     if frame_pos == 'first':
         ret,frame = vid.read()
@@ -455,7 +463,7 @@ def getFrame(videoFile, frame_pos = 'last'):
         return frame
 
     else:
-        for i in range(50): # sometimes cannot get last frame!?
+        for i in range(100): # sometimes cannot get last frame!?
         
             last_frame_num = int(vid.get(cv2.CAP_PROP_FRAME_COUNT)) - i
             vid.set(cv2.CAP_PROP_POS_FRAMES, last_frame_num)
@@ -467,8 +475,11 @@ def getFrame(videoFile, frame_pos = 'last'):
                 vid.release()
                 return frame
         vid.release()    
-        exit('Cannot get last frame in ' + str(i+1) + ' tries')
-            
+        print('Cannot get last frame in ' + str(i+1) + ' tries')
+        vid_width  = int(vid.get(3))
+        vid_height = int(vid.get(4))
+        frame = np.zeros([vid_height,vid_width])
+        return frame          
 
 def getVideoData(videoFile, printOut = True):
     if len(glob.glob(videoFile)) == 0:
