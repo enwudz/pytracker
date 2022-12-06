@@ -17,7 +17,12 @@ import scipy.signal
 
 '''
 WISH LIST
+be more forgiving or flexible about filenames
+Right now it is expecting files that look like this
+IW_6Dec_treatment_tardigradeDescription.mov
 
+and it wants a micrometer image that looks like this:
+IW_6Dec_micrometer.png
         
 '''
 
@@ -68,7 +73,10 @@ def main(centroid_file, plot_style = 'line'): # scatter or line
     
     # print out data
     initials, date, treatment, tardistring = filestem.split('_')
-    tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
+    if 'tardigrade' in tardistring:
+        tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
+    else:
+        tardigrade = tardistring
     datastring = filestem + ',' + str(getScale(filestem))
     datastring += ',' + ','.join([initials,date,treatment,tardigrade])
     datastring += ',' + ','.join([str(x) for x in [vid_length, area, distance, discrete_turns, angle_space, num_stops]])  
