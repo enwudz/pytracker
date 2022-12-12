@@ -23,6 +23,11 @@ from scipy import stats
 
 def main(movie_file):
 
+    
+    # get and save first frame
+    # first_frame = getFirstFrame(movie_file)
+    # cv2.imwrite(movie_file.split('.')[0] + '.png', first_frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    
     # make background image using N random frames of video
     background_image = backgroundFromRandomFrames(movie_file, 100)
 
@@ -77,7 +82,7 @@ def findCritter(video_file, background, pixThreshold = 25):
         if len(contours) > 1:
             print('frame ' + str(frame_number) + ' has ' + str(len(contours)) + ' detected objects!')
             if len(areas) == 0:
-                target_area = 10000 # just a guess
+                target_area = 5000 # just a guess
                 current_loc = (400,400)
             else:
                 target_area = np.mean(areas)
