@@ -466,7 +466,6 @@ def getFrame(videoFile, frame_pos = 'last'):
 
     else:
         # this code goes 'backwards' through frame numbers and tries to grab a frame
-        # sometimes it goes as far as 50 ... and still cannot get the last frame!
         for i in range(50): # sometimes cannot get last frame!?
 
             last_frame_num = int(vid.get(cv2.CAP_PROP_FRAME_COUNT)) - i
@@ -478,7 +477,9 @@ def getFrame(videoFile, frame_pos = 'last'):
                 # print('Got last frame at movie end - ' + str(i+1) + ' frames')
                 vid.release()
                 return frame
-
+    
+    # sometimes it still cannot get the last frame even after going backwards!
+    # if so, go through video and just keep the last 'successful' frame
     if ret == False:
         print('Cannot get last frame in ' + str(i+1) + ' tries')
         vid.set(cv2.CAP_PROP_POS_FRAMES, 1)
