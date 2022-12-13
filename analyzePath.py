@@ -72,13 +72,19 @@ def main(centroid_file, plot_style = 'line'): # scatter or line
         plt.show()
 
     # print out data
-    initials, date, treatment, tardistring = filestem.split('_')
+    fileData = filestem.split('_')
+    if len(fileData) == 4:
+        initials, date, treatment, tardistring = filestem.split('_')
+        timeRange = ''
+    elif len(fileData) == 5:
+        initials, date, treatment, tardistring, timeRange = filestem.split('_')
+        
     if 'tardigrade' in tardistring:
         tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
     else:
         tardigrade = tardistring
     datastring = filestem + ',' + str(getScale(filestem))
-    datastring += ',' + ','.join([initials,date,treatment,tardigrade])
+    datastring += ',' + ','.join([initials,date,treatment,tardigrade,timeRange])
     datastring += ',' + ','.join([str(x) for x in [vid_length, area, distance, discrete_turns, angle_space, num_stops]])
     print(datastring)
 
@@ -495,7 +501,6 @@ def getFrame(videoFile, frame_pos = 'last'):
             else:
                 frame_num += 1
                 good_frame = frame
-
 
 
 def getVideoData(videoFile, printOut = True):
