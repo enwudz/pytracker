@@ -26,20 +26,22 @@ IW_6Dec_micrometer.png
 
 '''
 
-def main(centroid_file, plot_style = 'line'): # scatter or line
-    # plot_style = 'none' # 'scatter' or 'line' or comment out
+def main(tracking_data, plot_style = 'line'): # scatter or line
+    
+    # tracking_data file is from trackCritter.py
 
     # get height, width, fps from filestem
-    filestem = centroid_file.split('_centroids')[0]
+    filestem = tracking_data.split('_tracked')[0]
     movie_file = filestem + '.mov'
     (vid_width, vid_height, vid_fps, vid_frames, vid_length) = getVideoData(movie_file, False)
 
-    # get median tardigrade size (i.e. area in pix^2)
-    area = getAreas(filestem)
-
-    # read in coordinates
-    df = pd.read_csv(centroid_file, names = ['frametime','x','y'], header=None)
+    # read in data
+    df = pd.read_csv(tracking_data, names = ['frametime','area','x','y'], header=None)
     frametimes = df.frametime.values
+    areas = df.area.values
+    median_area = np.median(areas)
+    
+    # get coordinates
     xcoords = df.x.values
     ycoords = df.y.values
 
@@ -65,27 +67,27 @@ def main(centroid_file, plot_style = 'line'): # scatter or line
             f, a = plotPathScatter(filestem, xcoords, ycoords, vid_length)
 
         # ==> add labels from experiment and show plot:
-        a.set_xlabel(getDataLabel(area, distance, vid_length, angle_space, discrete_turns, num_stops ))
+        a.set_xlabel(getDataLabel(median_area, distance, vid_length, angle_space, discrete_turns, num_stops ))
         a.set_xticks([])
         a.set_yticks([])
         plt.title(filestem)
         plt.show()
 
     # print out data
-    fileData = filestem.split('_')
-    if len(fileData) == 4:
-        initials, date, treatment, tardistring = filestem.split('_')
-        timeRange = ''
-    elif len(fileData) == 5:
-        initials, date, treatment, tardistring, timeRange = filestem.split('_')
+    # fileData = filestem.split('_')
+    # if len(fileData) == 4:
+    #     initials, date, treatment, tardistring = filestem.split('_')
+    #     timeRange = ''
+    # elif len(fileData) == 5:
+    #     initials, date, treatment, tardistring, timeRange = filestem.split('_')
         
-    if 'tardigrade' in tardistring:
-        tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
-    else:
-        tardigrade = tardistring
+    # if 'tardigrade' in tardistring:
+    #     tardigrade = tardistring.split('tardigrade')[1].split('-')[0]
+    # else:
+    #     tardigrade = tardistring
     datastring = filestem + ',' + str(getScale(filestem))
-    datastring += ',' + ','.join([initials,date,treatment,tardigrade,timeRange])
-    datastring += ',' + ','.join([str(x) for x in [vid_length, area, distance, discrete_turns, angle_space, num_stops]])
+    # datastring += ',' + ','.join([initials,date,treatment,tardigrade,timeRange])
+    datastring += ',' + ','.join([str(x) for x in [vid_length, median_area, distance, discrete_turns, angle_space, num_stops]])
     print(datastring)
 
     return stop_times, turn_times
@@ -117,13 +119,49 @@ def getScale(filestem):
     #print('Scale is ' + str(scale))
     return scale
 
+def getFirstLastFrames(filestem):
+    first_frame_file = filestem + '_first.png'
+    last_frame_file = filestem + '_last.png'
+    
+    try:
+        first_frame = cv2.imread(first_frame_file)
+    except:
+        vidcap = cv2.VideoCapture(filestem + '.mov')
+        success, image = vidcap.read()
+        if success:
+            first_frame = image
+        else:
+            print('cannot get an image from ' + filestem)
+            first_frame = None
+    
+    try:
+        last_frame = cv2.imread(last_frame_file)
+    except:
+        vidcap = cv2.VideoCapture(filestem + '.mov')
+        frame_num = 1
+        good_frame = None
+        while vidcap.isOpened():
+            ret, frame = vidcap.read()
+            if ret == False:
+                print('Last successful frame = ' + str(frame_num))
+                last_frame = good_frame
+                vidcap.release()
+            else:
+                frame_num += 1
+                good_frame = frame
+    
+    return first_frame, last_frame
+
+def superImposedFirstLast(filestem):
+    # superimpose first and last frames
+    first_frame, last_frame = getFirstLastFrames(filestem)
+    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    return combined_frame
+
 def plotPathScatter(filestem, xcoords, ycoords, vid_length):
 
-    # get last frame of movie
-    movie_file = filestem + '.mov'
-    first_frame = getFrame(movie_file,'first')
-    last_frame = getFrame(movie_file,'last')
-    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    combined_frame = superImposedFirstLast(filestem)
+    
 
     f, a = plt.subplots(1, figsize=(14,6))
     a.imshow(combined_frame) # combined_frame or last_frame
@@ -141,13 +179,7 @@ def plotPathScatter(filestem, xcoords, ycoords, vid_length):
 
 def plotSmoothedPath(filestem, xcoords, ycoords, smoothedx, smoothedy):
 
-    # get first and last frame of movie
-    movie_file = filestem + '.mov'
-    first_frame = getFrame(movie_file,'first')
-    last_frame = getFrame(movie_file,'last')
-
-    print(np.shape(first_frame), np.shape(last_frame))
-    combined_frame = cv2.addWeighted(first_frame, 0.3, last_frame, 0.7, 0)
+    combined_frame = superImposedFirstLast(filestem)
 
     f, a = plt.subplots(1, figsize=(14,6))
     a.imshow(combined_frame) # combined_frame or last_frame
@@ -381,37 +413,6 @@ def getDataLabel(area, distance, vid_length, angle_space = 0, discrete_turns = 0
 
     return data_label
 
-def getAreas(filestem):
-    '''
-    read in areas from a file
-    where the file name is filestem_areas.csv
-    and return the median area
-
-    Parameters
-    ----------
-    filestem : string
-        The name of the video, with .mov removed.
-
-    Returns
-    -------
-    median of the areas : floating point decimal
-        The median of a list of areas.
-
-    '''
-    area_file = filestem + '_areas.csv'
-    try:
-        f = open(area_file,'r')
-        #print('Getting areas from ' + area_file)
-    except:
-        exit('Cannot find ' + area_file)
-    areas = [float(x.rstrip()) for x in f.readlines()]
-    # histfig, histax = plt.subplots(1)
-    # histax.hist(areas)
-    # histax.set_xlabel('Tardigrade area')
-    # histax.set_ylabel('Number of frames')
-    # plt.show()
-    return np.median(areas)
-
 def cumulativeDistance(x,y):
     '''
     Given a list of x and y points, calculate the cumulative distance of a path
@@ -462,47 +463,6 @@ def smoothFiltfilt(x, pole=3, freq=0.1):
     filtered = scipy.signal.filtfilt(b,a,x)
     return filtered
 
-def getFrame(videoFile, frame_pos = 'last'):
-    vid = cv2.VideoCapture(videoFile)
-
-    if frame_pos == 'first':
-        ret,frame = vid.read()
-        vid.release()
-        return frame
-
-    else:
-        # this code goes 'backwards' through frame numbers and tries to grab a frame
-        for i in range(50): # sometimes cannot get last frame!?
-
-            last_frame_num = int(vid.get(cv2.CAP_PROP_FRAME_COUNT)) - i
-            vid.set(cv2.CAP_PROP_POS_FRAMES, last_frame_num)
-            ret, frame = vid.read()
-
-            if ret == True:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                # print('Got last frame at movie end - ' + str(i+1) + ' frames')
-                vid.release()
-                return frame
-    
-    # sometimes it still cannot get the last frame even after going backwards!
-    # if so, go through video and just keep the last 'successful' frame
-    if ret == False:
-        print('Cannot get last frame in ' + str(i+1) + ' tries')
-        vid.set(cv2.CAP_PROP_POS_FRAMES, 1)
-        # was not able to find the last frame in many tries!
-        # go through from beginning
-        frame_num = 1
-        while vid.isOpened():
-            ret, frame = vid.read()
-            if ret == False:
-                print('Last successful frame = ' + str(frame_num))
-                return good_frame
-                vid.release()
-            else:
-                frame_num += 1
-                good_frame = frame
-
-
 def getVideoData(videoFile, printOut = True):
     if len(glob.glob(videoFile)) == 0:
         exit('Cannot find ' + videoFile)
@@ -528,11 +488,11 @@ if __name__ == "__main__":
 
 
     if len(sys.argv) > 1:
-        centroid_file = sys.argv[1]
+        tracking_data = sys.argv[1]
     else:
-        centroid_list = glob.glob('*centroid*')
-        centroid_file = centroid_list[0]
+        tracking_list = glob.glob('*tracked*')
+        tracking_data = tracking_list[0]
 
-    #print('Getting data from ' + centroid_file)
+    #print('Getting data from ' + tracking_data)
 
-    main(centroid_file)
+    main(tracking_data)

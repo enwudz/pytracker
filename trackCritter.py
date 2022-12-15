@@ -11,6 +11,12 @@ ffmpeg:
    https://video.stackexchange.com/questions/18547/simple-video-editing-software-that-can-handlethis/18549#18549
 
 Wish list:
+1. if cannot find object in first frame, cX and cY will be undefined
+and program will exit with an error
+so need to figure out what to do if this is the case
+
+2. figure out why background fails sometimes
+consider blurring the background image a bit? to counteract small fluctuations in illumination and focus?
 
 """
 
@@ -22,17 +28,17 @@ import sys
 from scipy import stats
 
 def main(movie_file):
-
     
     # get and save first frame
-    # first_frame = getFirstFrame(movie_file)
-    # cv2.imwrite(movie_file.split('.')[0] + '.png', first_frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    first_frame = getFirstFrame(movie_file)
+    cv2.imwrite(movie_file.split('.')[0] + '_first.png', first_frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
     
     # make background image using N random frames of video
+    # (or load a background image that is already made)
     background_image = backgroundFromRandomFrames(movie_file, 100)
 
     # run through video and compare each frame with background
-    findCritter(movie_file, background_image, 25)
+    findCritter(movie_file, background_image, 25) # typical threshold is 25, scale of 1 to 255
 
     return
 
@@ -59,15 +65,20 @@ def findCritter(video_file, background, pixThreshold = 25):
     areas = [] # container for calculated areas of target object at each frame
 
     while vid.isOpened():
+        
         ret, frame = vid.read()
         frame_number += 1
+        
         # frameTime = int(vid.get(cv2.CAP_PROP_POS_MSEC)) # this returns zeros at end of video
         frameTime = float(frame_number)/fps
 
-        if (ret != True):  # no frame!
+        if ret != True:  # no frame!
             print('... video end!')
             break
 
+        # save a copy of the original frame for later
+        saved_frame = frame.copy()
+        
         # find difference between frame and background, as thresholded binary image
         binary_frame = getBinaryFrame(frame, background, pixThreshold)
 
@@ -92,25 +103,31 @@ def findCritter(video_file, background, pixThreshold = 25):
             target = getTargetObject(contours, current_loc, target_area)
         else:
             target = contours[0]
-
-        # get centroid of target object
+    
         # calculate moment of target object
         M = cv2.moments(target)
 
         if M["m00"] > 0:
+            
+            # get centroid of target object
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
 
             # get area of target object
-            target_area = cv2.contourArea(target)
-            areas.append(target_area)
+            target_area = cv2.contourArea(target)        
+            
         else:
             print('skipping this frame, cannot find target object')
             # to keep #centroids == #frames ...
             # append last centroid found
 
+        # if cannot find object in first frame, cX and cY will be undefined
+        # and program will exit with an error
+        # so need to figure out what to do if this is the case
+
         # store coordinates
         centroid_coordinates.append((frameTime,cX,cY))
+        areas.append(target_area)
 
         # ==> SHOW CENTROIDS: show (color coded) centroids on frame
         # cv2.circle(frame, (cX, cY), 10, dot_colors[frame_number-1], -1)
@@ -133,11 +150,24 @@ def findCritter(video_file, background, pixThreshold = 25):
         # if cv2.waitKey(25) & 0xFF == ord('q'):
         #     break
 
+    # save last frame
+    cv2.imwrite(video_file.split('.')[0] + '_last.png', saved_frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    
+    # shut down the video capture object
     vid.release()
     cv2.destroyAllWindows()
 
-    writeData(fstem + '_centroids', centroid_coordinates)
-    writeData(fstem + '_areas', areas)
+    # save centroids and areas
+    writeData(fstem, centroid_coordinates, areas)
+
+def writeData(filestem, centroid_coordinates, areas):
+    outfile = filestem + '_tracked.csv'
+    o = open(outfile, 'w')
+    for i, c in enumerate(centroid_coordinates):
+        stuff = [str(thing) for thing in c]
+        o.write(','.join([stuff[0], str(areas[i]), stuff[1], stuff[2]]) + '\n')
+        
+    o.close()
 
 def addCoordinatesToFrame(frame, coordinates, colors):
     '''
@@ -159,18 +189,6 @@ def addCoordinatesToFrame(frame, coordinates, colors):
         cv2.circle(frame, (coord[0], coord[1]), 5, colors[i], -1)
 
     return frame
-
-def writeData(filestem, data):
-    outfile = filestem + '.csv'
-    o = open(outfile, 'w')
-    for d in data:
-        if type(d) == tuple:
-            stuff = [str(thing) for thing in d]
-            o.write(','.join(stuff) + '\n')
-        else:
-            o.write(str(d) + '\n')
-
-    o.close()
 
 def makeColorList(cmap_name, N):
      cmap = cm.get_cmap(cmap_name, N)
@@ -289,13 +307,18 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
 
         # Select n frames at random from the video
         frames_in_video = getFrameCount(movie_file)
-        background_frames, num_background_frames = getBackgroundFrames(frames_in_video, num_background_frames)
-
+        
+        num_background_frames = min(num_background_frames, frames_in_video)
+        
+        background_frames = sorted(np.random.choice(frames_in_video,
+                                       num_background_frames,
+                                       replace = False))
+        
         # make an empty matrix to store stack of video frames
         img = getFirstFrame(movie_file) # get first frame
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img_height, img_width = np.shape(gray)
-        video_stack = np.zeros([img_height, img_width, num_background_frames])
+        video_stack = np.zeros([img_height, img_width, len(background_frames)])
 
         frame_counter = 0
         image_index = 0
@@ -322,6 +345,8 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
         # get mode of image stack for each pixel
         print("... calculating mode for background image (takes awhile) ...")
         background_image = stats.mode(video_stack, axis=2)[0][:,:] # this is SLOW!
+        
+        # consider blurring the background image a bit?
 
         print('... saving background image as ' + background_imname)
         cv2.imwrite(background_imname, background_image)
@@ -332,13 +357,12 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
     background_image = cv2.cvtColor(background_image, cv2.COLOR_BGR2GRAY)
     return background_image
 
+# def getBackgroundFrames(num_frames, num_background_frames):
+#     num_background_frames = min(num_background_frames, num_frames)
 
-def getBackgroundFrames(num_frames, num_background_frames):
-    num_background_frames = min(num_background_frames, num_frames)
-
-    return sorted(np.random.choice(num_frames,
-                                   num_background_frames,
-                                   replace = False)), num_background_frames
+#     return sorted(np.random.choice(num_frames,
+#                                    num_background_frames,
+#                                    replace = False)), num_background_frames
 
 def getImageSize(img):
     """get the # rows x # cols for an image"""
