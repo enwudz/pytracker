@@ -63,6 +63,8 @@ def findCritter(video_file, background, pixThreshold = 25):
 
     centroid_coordinates = [] # container for (x,y) coordinates of centroid of target object at each frame
     areas = [] # container for calculated areas of target object at each frame
+    
+    stored_target = ''
 
     while vid.isOpened():
         
@@ -86,23 +88,25 @@ def findCritter(video_file, background, pixThreshold = 25):
         contours, hierarchy = cv2.findContours(binary_frame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # draw contours on the original frame
-        # cv2.drawContours(frame, contours, -1, (0,255,0), 5)
+        cv2.drawContours(frame, contours, -1, (0,255,0), 5)
 
         # if more than one contour, make a decision about which contour is the target object
         # decision can be based on area of target ... or maybe last known position?
         if len(contours) > 1:
             print('frame ' + str(frame_number) + ' has ' + str(len(contours)) + ' detected objects!')
             if len(areas) == 0:
-                target_area = 5000 # just a guess
+                target_area = 7000 # just a guess
                 current_loc = (400,400)
             else:
                 target_area = np.mean(areas)
                 current_x = centroid_coordinates[-1][1]
                 current_y = centroid_coordinates[-1][2]
                 current_loc = np.array([current_x, current_y])
-            target = getTargetObject(contours, current_loc, target_area)
+            target = getTargetObject(contours, stored_target, current_loc, target_area)
         else:
             target = contours[0]
+    
+        stored_target = target
     
         # calculate moment of target object
         M = cv2.moments(target)
@@ -130,7 +134,7 @@ def findCritter(video_file, background, pixThreshold = 25):
         areas.append(target_area)
 
         # ==> SHOW CENTROIDS: show (color coded) centroids on frame
-        # cv2.circle(frame, (cX, cY), 10, dot_colors[frame_number-1], -1)
+        cv2.circle(frame, (cX, cY), 10, dot_colors[frame_number-1], -1)
         # ==> OR show ALL centroids so far on the frame
         # frame  = addCoordinatesToFrame(frame, centroid_coordinates, dot_colors)
 
@@ -146,9 +150,9 @@ def findCritter(video_file, background, pixThreshold = 25):
         # saveFrameToFile(fstem, frame_number, frame) # frame or binary_frame
 
         # ==> SHOW THE MOVIE (with centroids, times, or whatever is added)
-        # cv2.imshow('press (q) to quit', frame) # frame or binary_frame
-        # if cv2.waitKey(25) & 0xFF == ord('q'):
-        #     break
+        cv2.imshow('press (q) to quit', frame) # frame or binary_frame
+        if cv2.waitKey(25) & 0xFF == ord('q'):
+            break
 
     # save last frame
     cv2.imwrite(video_file.split('.')[0] + '_last.png', saved_frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])
@@ -202,7 +206,7 @@ def makeColorList(cmap_name, N):
 
      return [tuple(i) for i in cmap]
 
-def getTargetObject(contours, current_loc, targetArea=5000):
+def getTargetObject(contours, stored_contour, current_loc, targetArea=5000):
     '''
     Parameters
     ----------
@@ -225,7 +229,10 @@ def getTargetObject(contours, current_loc, targetArea=5000):
         ycoords = [int(M["m01"] / M["m00"]) for M in moments]
     except:
         print(' ... trouble finding object')
-        return contours[0]
+        if len(stored_contour) > 0:
+            return stored_contour
+        else:
+            return contours[0]
 
     coords = [np.array([x,ycoords[i]]) for i,x in enumerate(xcoords)]
     distances = [np.linalg.norm(current_loc - coord) for coord in coords]
@@ -236,11 +243,23 @@ def getTargetObject(contours, current_loc, targetArea=5000):
     closest_in_area = np.argmin(np.abs(areas - targetArea))
 
     if closest_in_distance != closest_in_area:
-        print(' ... target uncertain, choosing the one that is closest to last known position')
+        
+        # which is the better guess? distance or area?
+        # if distance > the length of the tardigrade, then choose AREA
+        length_estimate = 1.2 * np.sqrt(targetArea)
+        min_distance = min(distances)
+        if min_distance > length_estimate:
+            best_guess = contours[closest_in_area]
+            print(' ... target uncertain, choosing the one that is closest to expected size')
+        else:
+            best_guess = contours[closest_in_distance]
+            print(' ... target uncertain, choosing the one that is closest to expected location')
+        
     else:
         print(' ... choosing the target that is closest in position and size')
-
-    return contours[closest_in_distance]
+        best_guess = contours[closest_in_distance]
+        
+    return best_guess
 
 def getBinaryFrame(frame, background, pixThreshold):
 
@@ -313,7 +332,7 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
         background_frames = sorted(np.random.choice(frames_in_video,
                                        num_background_frames,
                                        replace = False))
-        
+
         # make an empty matrix to store stack of video frames
         img = getFirstFrame(movie_file) # get first frame
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -326,9 +345,14 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
         # go through video
         vid = cv2.VideoCapture(movie_file)
         while (vid.isOpened()):
+            
             ret, frame = vid.read()
+            
+            # occasionally an empty frame will be encountered before the expected end of the video
             if (ret != True):  # no frame!
-                print('... video end!')
+                print('... empty image at frame ' + str(frame_counter) + '!')
+                print('... expected ' + str(frames_in_video) + ' frames in ' + movie_file)
+                video_stack = video_stack[:,:,:image_index]
                 break
 
             #print('Looking at frame ' + str(frame_counter) + ' of ' + str(frames_in_video))
@@ -341,7 +365,7 @@ def backgroundFromRandomFrames(movie_file, num_background_frames):
 
         #print('... releasing video ...')
         vid.release()
-
+        
         # get mode of image stack for each pixel
         print("... calculating mode for background image (takes awhile) ...")
         background_image = stats.mode(video_stack, axis=2)[0][:,:] # this is SLOW!
