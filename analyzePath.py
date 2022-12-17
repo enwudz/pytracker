@@ -17,16 +17,20 @@ import scipy.signal
 
 '''
 WISH LIST
-be more forgiving or flexible about filenames
-Right now it is expecting files that look like this
-IW_6Dec_treatment_tardigradeDescription.mov
+change to only one plot option (currenlty is scatter or line)
+change color for smoothed path = time gradient
+change color for raw path = light gray(?)
 
-and it wants a micrometer image that looks like this:
-IW_6Dec_micrometer.png
+get movie parameters from the *tracked* files instead of the movie
+    fps, time ... 
+    
+think about next step - what is going take these updated track files, and
+    combine clips from single tardigrades
+    save summary data
 
 '''
 
-def main(tracking_data, plot_style = 'line'): # scatter or line
+def main(tracking_data, plot_style = 'line'): # scatter or line or none
     
     # tracking_data file is from trackCritter.py
 
@@ -41,11 +45,13 @@ def main(tracking_data, plot_style = 'line'): # scatter or line
     areas = df.area.values
     median_area = np.median(areas)
     
+    # get fps, video time from data
+    
     # get coordinates
     xcoords = df.x.values
     ycoords = df.y.values
 
-    # smooth the data!
+    # smooth the coordinates!
     smoothedx = smoothFiltfilt(xcoords,3,0.05)
     smoothedy = smoothFiltfilt(ycoords,3,0.05)
 
