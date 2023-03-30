@@ -1,4 +1,4 @@
-#!/Users/iwoods/p3/bin/python
+#!/usr/bin/env python3
 
 import trackingTools
 import sys
