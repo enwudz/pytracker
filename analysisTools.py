@@ -255,9 +255,9 @@ def make_N_colors(cmap_name, N):
 
 # standard error of the mean
 def stde(mat,ax):
-	s = np.std(mat, ax)
-	se = s / np.sqrt(np.shape(mat)[1])
-	return se
+    s = np.std(mat, ax)
+    se = s / np.sqrt(np.shape(mat)[1])
+    return se
 
 # format colors of a boxplot object
 def formatBoxColors(bp, boxColors):
@@ -378,12 +378,12 @@ def plotdnd(timeForPlot,axeslist):
 # ribbon plot from axis, time vector, data, color
 def timeVdataRibbonPlot(ax,t,d,c): # axis, timeVec, data, color
 
-	ax.plot(t,np.mean(d,axis=1),color=c)
-	se = stde(d,1)
-	ax.fill_between(t, np.mean(d,1)-se, np.mean(d,1)+se, alpha = 0.3, facecolor=c, edgecolor='')
-	ax.set_xlim([t[0],t[-1]])
-	ax.set_xticks([])
-	#ax.xaxis.set_major_formatter( dates.DateFormatter('%M') )
+    ax.plot(t,np.mean(d,axis=1),color=c)
+    se = stde(d,1)
+    ax.fill_between(t, np.mean(d,1)-se, np.mean(d,1)+se, alpha = 0.3, facecolor=c, edgecolor=None)
+    ax.set_xlim([t[0],t[-1]])
+    ax.xaxis.set_major_formatter( dates.DateFormatter('%H:%M:%S') )
+    return ax
 
 # day / night activity boxplot from axis, time vector, colors, and roigroups
 def makeribbonBoxPlot(ax,t,d,plotColors,roiGroups,roiNames):
